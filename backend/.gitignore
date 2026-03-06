@@ -33,7 +33,8 @@ venv/
 env/
 ENV/
 .env/
-
+aisee/
+*.exe
 # Google OAuth tokens (never commit these)
 token.json
 credentials.json
