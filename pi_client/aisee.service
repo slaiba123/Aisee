@@ -1,0 +1,61 @@
+# pi_client/aisee.service
+# Auto-starts pi_client.py on every boot
+#
+# Install:
+#   sudo cp aisee.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable aisee
+#   sudo systemctl start aisee
+#
+# Logs:
+#   sudo journalctl -u aisee -f
+
+[Unit]
+Description=AiSee Smart Glasses
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple# pi_client/aisee.service
+# Auto-starts smart_glasses_aisee.py on every boot
+#
+# Install:
+#   sudo cp aisee.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable aisee
+#   sudo systemctl start aisee
+#
+# Logs:
+#   sudo journalctl -u aisee -f
+#   sudo journalctl -u aisee --since "10 min ago"
+
+[Unit]
+Description=AiSee Smart Glasses
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/aisee
+ExecStart=/usr/bin/python3 /home/pi/aisee/smart_glasses_aisee.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+# Required for camera + display access
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/pi/.Xauthority
+
+[Install]
+WantedBy=multi-user.target
+
+User=pi
+ExecStart=/usr/bin/python3 /home/pi/aisee/pi_client.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+html {
+    scroll-behavior: smooth;
+}
+
+@font-face {
+    font-family: Poppins-Regular;
+    src: url('../src/assets/fonts/poppins/Poppins-Regular.ttf');
+}
+
+@font-face {
+    font-family: Poppins-Light;
+    src: url('../src/assets/fonts/poppins/Poppins-Light.ttf');
+}
+
+
+@font-face {
+    font-family: Poppins-ExLight;
+    src: url('../src/assets/fonts/poppins/Poppins-ExtraLight.ttf');
+}
+
+@font-face {
+    font-family: Poppins-Bold;
+    src: url('../src/assets/fonts/poppins/Poppins-Bold.ttf');
+}
+
+
+@font-face {
+    font-family: Poppins-ExBold;
+    src: url('../src/assets/fonts/poppins/Poppins-ExtraBold.ttf');
+}
+
+@font-face {
+    font-family: Poppins-SemiBold;
+    src: url('../src/assets/fonts/poppins/Poppins-SemiBold.ttf');
+}
+
+@theme {
+    --font-poppins: Poppins-Regular, sans-serif;
+    --font-poppins-bold: Poppins-Bold, sans-serif;
+    --font-poppins-exbold: Poppins-ExBold, sans-serif;
+    --font-poppins-light: Poppins-Light, sans-serif;
+    --font-poppins-exlight: Poppins-ExLight, sans-serif;
+    --font-poppins-semibold: Poppins-SemiBold, sans-serif;
+    /* --animate-blink: blink 1s step-end infinite;
+    --animate-fade: fadeOut 1s ease-in-out;
+    --animate-appear: appear 0.5s ease-in-out;  */
+}
