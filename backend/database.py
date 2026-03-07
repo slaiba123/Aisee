@@ -189,6 +189,10 @@
 # Three tables: devices + users + oauth_states
 # Supabase (PostgreSQL) in production, SQLite for local dev
 
+# backend/database.py
+# Three tables: devices + users + oauth_states
+# Supabase (PostgreSQL) in production, SQLite for local dev
+
 import os
 from datetime import datetime, timedelta
 from sqlalchemy import create_engine, Column, String, Boolean, Text, DateTime, ForeignKey
@@ -318,12 +322,16 @@ def claim_device(db: Session, device_code: str,
     device = get_device(db, device_code)
     if not device:
         raise ValueError("Device code not found")
-    if not device.is_active:
-        raise ValueError("Device has been revoked")
+    # Allow re-claiming if device was disconnected (is_active=False, claimed=False)
+    # Block only if active AND claimed by a different user
+    if device.is_active and device.claimed and device.user_email != user_email:
+        raise ValueError("Device is already active and claimed by another user")
+    # Re-activate the device and save new token
     device.google_token = encrypted_token
     device.claimed      = True
     device.user_email   = user_email
     device.claimed_at   = datetime.utcnow()
+    device.is_active    = True   # Re-activate if it was disconnected
     return device
 
 def get_token(db: Session, device_code: str) -> str | None:
@@ -345,9 +353,22 @@ def update_token(db: Session, device_code: str, encrypted_token: str):
     )
 
 def revoke_device(db: Session, device_code: str):
-    db.query(Device).filter(Device.device_code == device_code).update(
-        {"is_active": False, "google_token": None}
-    )
+    """
+    User clicks Disconnect. Clears ALL user data from device.
+    Device goes back to unclaimed state — can be set up again by same or new user.
+    Pi stops working immediately (get_token checks is_active + claimed).
+    """
+    db.query(Device).filter(Device.device_code == device_code).update({
+        "is_active":    False,   # Pi blocked immediately
+        "google_token": None,    # Token cleared
+        "claimed":      False,   # Allows re-claiming
+        "user_email":   None,    # Email cleared
+        "claimed_at":   None,    # Reset timestamp
+    })
+    # Also clear device_code from the user row
+    db.query(User).filter(User.device_code == device_code).update({
+        "device_code": None
+    })
 
 def reset_device(db: Session, device_code: str):
     db.query(Device).filter(Device.device_code == device_code).update({
