@@ -275,6 +275,7 @@
 
 # backend/auth.py
 import os, json, time
+os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
 from fastapi import APIRouter, HTTPException, Response, Cookie, Header
 from fastapi.responses import RedirectResponse
 from google_auth_oauthlib.flow import Flow
