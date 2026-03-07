@@ -273,7 +273,7 @@ except ImportError:
 # CONFIGURATION — Only change these two lines per Pi
 # =============================================================================
 
-SERVER_URL  = "https://aisee-api.railway.app"  # Your Railway backend URL
+SERVER_URL  = "https://aisee.onrender.com"  # Your Railway backend URL
 DEVICE_CODE = "AIS-4829"                        # Unique per Pi — matches DB + printed card
 
 # --- Camera ---
