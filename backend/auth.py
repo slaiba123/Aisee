@@ -1,6 +1,6 @@
 # # backend/auth.py
 # import os, json, time
-# os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"  # Avoid "Token's scope does not match client scopes" error
+# os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
 # from fastapi import APIRouter, HTTPException, Response, Cookie, Header
 # from fastapi.responses import RedirectResponse
 # from google_auth_oauthlib.flow import Flow
@@ -288,7 +288,7 @@ from pydantic import BaseModel
 
 from database import (
     get_db, claim_device, upsert_user, get_device, revoke_device,
-    save_oauth_state, consume_oauth_state,   # ← DB-based state, not memory
+    save_oauth_state, consume_oauth_state,
 )
 
 router = APIRouter()
@@ -303,8 +303,12 @@ BACKEND_URL   = os.getenv("BACKEND_URL",  "http://localhost:8000")
 IS_PROD       = os.getenv("ENV", "dev") == "production"
 REDIRECT_URI  = f"{BACKEND_URL}/auth/callback"
 
-SCOPES = ["https://www.googleapis.com/auth/drive.file", "openid", "email", "profile"]
-
+SCOPES = [
+    "https://www.googleapis.com/auth/drive.file",
+    "openid",
+    "email",
+    "profile",
+]
 
 # ── Crypto ────────────────────────────────────────────────────────────────────
 
@@ -315,10 +319,20 @@ def decrypt(data: str) -> str:
     return Fernet(FERNET_KEY).decrypt(data.encode()).decode()
 
 def make_session_jwt(google_id: str, device_code: str) -> str:
+    """
+    Sessions are intentionally very long-lived (1 year).
+    The Pi only needs to set up once — it should never be asked to re-login.
+    Google token refresh is handled separately in get_drive_service.
+    """
     return jwt.encode(
-        {"google_id": google_id, "device_code": device_code,
-         "exp": time.time() + 86400 * 7},
-        JWT_SECRET, algorithm="HS256"
+        {
+            "google_id":   google_id,
+            "device_code": device_code,
+            "exp":         time.time() + 86400 * 365,   # 1 year
+            "iat":         time.time(),
+        },
+        JWT_SECRET,
+        algorithm="HS256",
     )
 
 def verify_session(token: str) -> dict:
@@ -333,8 +347,8 @@ def verify_session(token: str) -> dict:
 def get_drive_service(device_code: str, db):
     """
     Builds a Google Drive client using the token stored for this device.
-    Identical to your original OCR script — token comes from DB not token.json.
-    Auto-refreshes expired tokens and saves back to DB.
+    Auto-refreshes expired access tokens using the stored refresh_token.
+    Saves the refreshed token back to DB so Pi never needs to re-authenticate.
     """
     from database import get_token, update_token
 
@@ -343,6 +357,14 @@ def get_drive_service(device_code: str, db):
         raise HTTPException(403, "Device not set up or has been revoked")
 
     token_json = json.loads(decrypt(encrypted))
+
+    # Ensure we have a refresh token — if missing, the device must re-setup
+    if not token_json.get("refresh_token"):
+        raise HTTPException(
+            403,
+            "Device needs to be re-linked — refresh token missing. "
+            "Please visit the setup page again."
+        )
 
     creds = Credentials(
         token=token_json.get("token"),
@@ -353,16 +375,26 @@ def get_drive_service(device_code: str, db):
         scopes=SCOPES,
     )
 
-    if creds.expired and creds.refresh_token:
-        creds.refresh(Request())
-        updated = {
-            "token":         creds.token,
-            "refresh_token": creds.refresh_token,
-            "token_uri":     creds.token_uri,
-            "scopes":        list(creds.scopes or []),
-        }
-        update_token(db, device_code, encrypt(json.dumps(updated)))
-        db.commit()
+    # Always refresh if expired — this is the key: refresh_token never expires
+    # (unless user revokes access in Google account settings)
+    if not creds.valid:
+        try:
+            creds.refresh(Request())
+            updated = {
+                "token":         creds.token,
+                # Preserve the original refresh_token — Google only sends it once
+                "refresh_token": creds.refresh_token or token_json.get("refresh_token"),
+                "token_uri":     creds.token_uri,
+                "scopes":        list(creds.scopes or SCOPES),
+            }
+            update_token(db, device_code, encrypt(json.dumps(updated)))
+            db.commit()
+        except Exception as e:
+            # Refresh failed — likely user revoked access in Google settings
+            raise HTTPException(
+                403,
+                f"Google access was revoked. Please visit the setup page to re-link. ({str(e)})"
+            )
 
     return build("drive", "v3", credentials=creds)
 
@@ -386,20 +418,15 @@ def _make_flow():
 
 @router.get("/google/url")
 def get_auth_url():
-    """
-    Step 1: Frontend requests Google login URL.
-    Saves state to DB — survives server restarts and multiple instances.
-    """
+    """Step 1: Frontend requests Google login URL."""
     flow = _make_flow()
     auth_url, state = flow.authorization_url(
         access_type="offline",
-        prompt="consent",
+        prompt="consent",       # Forces refresh_token to always be returned
+        include_granted_scopes="true",
     )
-
-    # Save state to DB (not memory — production safe)
     with get_db() as db:
-        save_oauth_state(db, state, ttl_seconds=300)  # 5 min TTL
-
+        save_oauth_state(db, state, ttl_seconds=300)
     return {"url": auth_url}
 
 
@@ -407,10 +434,8 @@ def get_auth_url():
 def oauth_callback(code: str, state: str):
     """
     Step 2: Google redirects here after user approves.
-    Validates state from DB (one-time use), saves user + encrypted token.
-    Redirects to frontend /setup with a short-lived pending JWT in URL.
+    Always requests prompt=consent so we always get a refresh_token.
     """
-    # Validate and consume state from DB
     with get_db() as db:
         valid = consume_oauth_state(db, state)
 
@@ -421,54 +446,60 @@ def oauth_callback(code: str, state: str):
     flow.fetch_token(code=code)
     creds = flow.credentials
 
-    # Get user info from Google
+    # Get user info
     info      = build("oauth2", "v2", credentials=creds).userinfo().get().execute()
     google_id = info["id"]
     email     = info["email"]
     name      = info.get("name", "")
 
-    # Build token JSON — same structure as token.json in your original OCR script
+    # CRITICAL: Always save the refresh_token.
+    # With prompt=consent, Google always provides a new one.
     token_data = {
         "token":         creds.token,
-        "refresh_token": creds.refresh_token,
+        "refresh_token": creds.refresh_token,   # Never expires unless user revokes
         "token_uri":     creds.token_uri,
-        "scopes":        list(creds.scopes or []),
+        "scopes":        list(creds.scopes or SCOPES),
     }
+
+    if not token_data["refresh_token"]:
+        # Shouldn't happen with prompt=consent, but guard anyway
+        raise HTTPException(
+            500,
+            "Google did not return a refresh token. Please try signing in again."
+        )
+
     encrypted_token = encrypt(json.dumps(token_data))
 
-    # Save user to DB
     with get_db() as db:
         upsert_user(db, google_id, email, name)
 
-    # Pack everything into a short-lived JWT
-    # Frontend reads this from the URL param after redirect
     pending_jwt = jwt.encode(
         {
             "google_id": google_id,
             "email":     email,
             "name":      name,
             "token":     encrypted_token,
-            "exp":       time.time() + 600,  # 10 minutes to enter device code
+            "exp":       time.time() + 600,   # 10 min to enter device code
         },
         JWT_SECRET,
         algorithm="HS256",
     )
 
-    # Redirect to frontend setup page — JWT in URL param, no cookies needed
     return RedirectResponse(url=f"{FRONTEND_URL}/setup?pending={pending_jwt}")
 
 
 class SetupBody(BaseModel):
     device_code: str
-    pending_jwt: str    # Short-lived JWT from URL param
+    pending_jwt: str
 
 
 @router.post("/setup")
 def complete_setup(body: SetupBody):
     """
-    Step 3: User enters their card code.
-    Decodes pending JWT, links Google token to device in DB.
-    Returns a session JWT stored in localStorage by frontend.
+    Step 3: User enters device code.
+    Links Google token to device. Returns a 1-year session JWT.
+    After this, the Pi works forever without re-authentication
+    (as long as the user hasn't revoked access in Google settings).
     """
     try:
         data = jwt.decode(body.pending_jwt, JWT_SECRET, algorithms=["HS256"])
@@ -485,12 +516,13 @@ def complete_setup(body: SetupBody):
         device = get_device(db, code)
         if not device:
             raise HTTPException(404, "Device code not found — check the code on your card")
-        if device.claimed and device.user_email != email:
+        if device.claimed and device.is_active and device.user_email != email:
             raise HTTPException(409, "This device is already linked to another account")
 
         claim_device(db, code, enc_token, email)
         upsert_user(db, google_id, email, name, device_code=code)
 
+    # Long-lived session JWT — user should never need to log in again
     session_token = make_session_jwt(google_id, code)
     return {
         "status":        "ok",
@@ -502,16 +534,24 @@ def complete_setup(body: SetupBody):
 @router.get("/me")
 def get_me(authorization: str = Header(None)):
     """
-    Returns current user info.
-    Reads session JWT from Authorization header (stored in localStorage).
+    Returns current user + device status.
+    Also returns a fresh session_token if the current one is close to expiry
+    (rolling refresh — keeps users permanently logged in).
     """
     if not authorization or not authorization.startswith("Bearer "):
         return {"logged_in": False}
+
     token = authorization.split(" ", 1)[1]
     try:
         payload = verify_session(token)
     except HTTPException:
         return {"logged_in": False}
+
+    # Rolling refresh: issue a new token if less than 30 days remain
+    new_token = None
+    exp = payload.get("exp", 0)
+    if exp - time.time() < 86400 * 30:
+        new_token = make_session_jwt(payload["google_id"], payload.get("device_code"))
 
     with get_db() as db:
         device_code = payload.get("device_code")
@@ -523,6 +563,8 @@ def get_me(authorization: str = Header(None)):
             "device_active": device.is_active if device else False,
             "claimed":       device.claimed   if device else False,
             "last_seen":     device.last_seen.isoformat() if device and device.last_seen else None,
+            # Frontend should save this if present — keeps session alive indefinitely
+            "new_token":     new_token,
         }
 
 
@@ -543,6 +585,5 @@ def revoke(authorization: str = Header(None)):
 
 @router.post("/logout")
 def logout():
-    # Session is in localStorage — client just deletes it
-    # Nothing to do server-side
+    # JWT is stateless — client deletes from localStorage
     return {"status": "ok"}
