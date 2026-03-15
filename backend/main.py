@@ -75,7 +75,3 @@ app.include_router(ocr_router,  prefix="/ocr",  tags=["OCR"])
 def health():
     return {"status": "ok"}
 
-@app.get("/debug/location")
-def server_location():
-    import requests
-    return requests.get("https://ipinfo.io/json").json()
