@@ -9,6 +9,7 @@ function App() {
   const path = window.location.pathname;
 
   if (path === "/setup") return <SetupPage toggled={toggled} />;
+  else if (path === "/demo") return <Demo />;
   return <AiSee />;
 }
 
