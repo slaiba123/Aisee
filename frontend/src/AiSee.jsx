@@ -12,6 +12,7 @@ const NAV_LINKS = [
   { label: "About",      href: "#about"    },
   { label: "Features",   href: "#features" },
   { label: "Working",    href: "#working"  },
+  { label: "Demo", href: "/demo" },
   { label: "Contact Us", href: "#contact"  },
   { label: "Set Up",     href: "/setup"    },
 ];
@@ -322,7 +323,7 @@ export default function AiSee() {
         <div className="max-w-3xl mx-auto">
           <h2 className="text-2xl sm:text-3xl md:text-5xl lg:text-6xl font-bold mb-10 text-center tracking-wider">Meet the Team</h2>
           {/* 2-col on mobile, 4-col on md+ */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-6 mt-6 md:mt-10 justify-items-center">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-6 lg:gap-40 mt-6 md:mt-10 justify-items-center">
             {TEAM_ITEMS.map((member) => (
               <div key={member.name} className="flex flex-col items-center gap-3">
                 <div className={`w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 rounded-full overflow-hidden border-4 cursor-pointer ${dark ? 'border-white' : 'border-gray-400'} bg-gray-200 hover:border-gray-500 transition-all`}>

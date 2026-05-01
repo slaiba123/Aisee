@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import ReactDOM from "react-dom/client";
 import AiSee from "./AiSee";
 import SetupPage from "./SetupPage";
+import Demo from "./Demo";
 import "./index.css";
 
 function App() {
