@@ -388,7 +388,7 @@ export default function AiSee() {
               href="mailto:ai-see@gmail.com"
               className="text-2xl sm:text-3xl md:text-5xl lg:text-7xl font-bold underline decoration-blue-500 underline-offset-8 hover:text-blue-400 transition-colors tracking-wider break-all"
             >
-              ai-see@gmail.com
+              abdulahadneduet@gmail.com
             </a>
           </div>
 
