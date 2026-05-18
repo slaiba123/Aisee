@@ -284,7 +284,7 @@ export default function AiSee() {
       <section id="features" className={`${dark ? 'bg-black text-white' : 'bg-white text-gray-800'} py-14 px-5`}>
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-2xl sm:text-3xl md:text-5xl lg:text-6xl font-bold mb-10 md:mb-14 tracking-wider">Why Buy AiSee?</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-10 sm:gap-8 md:gap-12 mt-6 md:mt-16">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-10 sm:gap-8 md:gap-12 mt-6 md:mt-16">
             {WHY_ITEMS.map((item) => (
               <div key={item.title} className="flex flex-col items-center gap-4 cursor-pointer">
                 <div className={`w-24 h-24 md:w-32 md:h-32 rounded-full ${!dark ? 'bg-black text-white' : 'bg-white text-gray-800'} flex items-center justify-center shrink-0`}>
